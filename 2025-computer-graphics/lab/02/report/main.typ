@@ -131,6 +131,8 @@ $
 
 = 实验结果
 
+视频见 `report/assets/showcase.mp4`。
+
 == 2D 三角形光栅化
 
 下图展示了 2D 任务的效果。橙色区域为 Edge-Walking 填充效果，青色边框为 Bresenham 算法绘制的边缘。
