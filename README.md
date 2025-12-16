@@ -14,6 +14,8 @@ My assignments in SYSU.
 
 ### Cryptography
 
+#### Theory
+
 - [`textbook`](https://book.douban.com/subject/26740029)
 
 #### Lab
