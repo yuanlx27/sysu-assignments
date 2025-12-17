@@ -16,6 +16,10 @@ My assignments in SYSU.
 
 - [`textbook`](https://www.taylorfrancis.com/books/mono/10.1201/9781315282497)
 
+### Database System Concepts
+
+- [`textbook`](https://www.db-book.com)
+
 ### Design and Analysis of Algorithms
 
 - [`textbook`](https://www.tup.tsinghua.edu.cn/bookscenter/book_09721601.html)
