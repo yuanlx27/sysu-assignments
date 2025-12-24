@@ -1,4 +1,5 @@
 #import "@local/sysu-templates:0.3.0": exercise
+#import exercise: *
 
 #show: exercise.with(
   title: "Assignment 6",
@@ -17,10 +18,82 @@ Show (give an example of) a double-bit error that can be detected but not correc
   image(width: 70%, "assets/images/20251221-142057.png"),
 ) <fig-1>
 
+#solution[
+  + Single-Bit Error Correction:
+
+    Consider the following example.
+
+    #grid(
+      columns: (1fr, 1fr),
+      figure(
+        caption: [Original Data],
+        table(
+          columns: 4,
+          gutter: (auto, auto, 2pt),
+          [1], [0], [1], [0],
+          [0], [1], [1], [0],
+          [1], [1], [0], [0],
+          [0], [0], [0], [0],
+        )
+      ),
+      figure(
+        caption: [Single-Bit Error Occurs],
+        table(
+          columns: 4,
+          gutter: (auto, auto, 2pt),
+          [1], [0], [1], [0],
+          text(fill: red)[1], [1], [1], text(fill: red)[1],
+          [1], [1], [0], [0],
+          text(fill: red)[1], [0], [0], [0],
+        )
+      )
+    )
+
+    The receiver sees that row 2 and column 1 have parity errors, indicating a single-bit error at their intersection.
+    The receiver can then correct this error by flipping the bit at that position back to 0.
+
+  + Double-Bit Error Detection (Uncorrectable):
+
+    Consider the following example.
+
+    #grid(
+      columns: (1fr, 1fr),
+      figure(
+        caption: [Original Data],
+        table(
+          columns: 4,
+          gutter: (auto, auto, 2pt),
+          [1], [0], [1], [0],
+          [0], [1], [1], [0],
+          [1], [1], [0], [0],
+          [0], [0], [0], [0],
+        )
+      ),
+      figure(
+        caption: [Double-Bit Error Occurs],
+        table(
+          columns: 4,
+          gutter: (auto, auto, 2pt),
+          text(fill: red)[0], text(fill: red)[1], [1], [0],
+          [0], [1], [1], [0],
+          [1], [1], [0], [0],
+          text(fill: red)[1], text(fill: red)[1], [0], [0],
+        )
+      )
+    )
+
+    The receiver sees that column 1 and column 2 have parity errors and knows the data is corrupted.
+    However, since row 1 shows no parity error (the two flipped bits cancel out),
+    the receiver cannot determine the row coordinate of the bits to correct.
+]
+
 = P5
 
 Consider the generator, $G = 1001$, and suppose that D has the value 11000111010.
 What is the value of R?
+
+#solution[
+]
 
 = P11
 
