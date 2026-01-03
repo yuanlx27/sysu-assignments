@@ -1,7 +1,7 @@
 #import "@local/sysu-templates:0.2.0": report
 
 #show: report.with(
-  title: "分治策略",
+  title: "第二章 分治策略",
   subtitle: "算法设计与分析上机作业一",
   student: (name: "元朗曦", id: "23336294"),
   institude: "计算机学院",
@@ -19,13 +19,13 @@
 
 完整代码如下：
 
-#raw(block: true, lang: "lua", read("assets/main.lua"))
+#raw(block: true, lang: "python", read("assets/main.py"))
 
 = 运行结果
 
-在终端运行 ```sh lua assets/main.lua``` 结果如下：
+在终端运行 ```sh python assets/main.py``` 结果如下：
 
 #figure(
   caption: [运行结果],
-  image("assets/images/20260103-132310.png"),
+  image("assets/images/20260103-135659.png"),
 )
