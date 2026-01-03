@@ -1,0 +1,118 @@
+\documentclass[a4paper,12pt]{article}
+\usepackage[UTF8]{ctex}
+\usepackage{graphicx}
+\usepackage{geometry}
+\usepackage{hyperref}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{float}
+
+\geometry{left=2.5cm,right=2.5cm,top=2.5cm,bottom=2.5cm}
+
+\title{计算机图形学 作业一 实验报告}
+\author{姓名：元朗曦 \\ 学号：23336294}
+\date{2025 年 11 月 10 日}
+
+\begin{document}
+
+\maketitle
+
+\section{实验目的}
+\begin{enumerate}
+    \item 熟悉 OpenGL 图形编程环境的搭建与配置（CMake, GLFW, GLM, ImGui）。
+    \item 掌握 OpenGL 基本图元（三角形、四边形等）的绘制方法与特性。
+    \item 理解并掌握二维与三维坐标变换、观察矩阵及投影矩阵（正交投影与透视投影）的原理与实现。
+    \item 实现三维物体的建模（拉伸）及交互式旋转控制。
+\end{enumerate}
+
+\section{实验原理}
+\subsection{基本图元}
+OpenGL 提供了多种图元绘制模式。本实验主要涉及：
+\begin{itemize}
+    \item \textbf{GL\_TRIANGLES}: 每三个顶点定义一个独立的三角形。
+    \item \textbf{GL\_TRIANGLE\_STRIP}: 复用前两个顶点，每增加一个顶点定义一个新三角形，效率较高。
+    \item \textbf{GL\_QUADS}: 每四个顶点定义一个四边形（在现代 Core Profile 中已废弃，但在兼容模式下可用）。
+\end{itemize}
+
+\subsection{坐标变换与投影}
+图形渲染管线中，顶点坐标经过模型变换（Model）、视图变换（View）和投影变换（Projection）最终映射到屏幕空间。
+\begin{itemize}
+    \item \textbf{正交投影 (Orthographic)}: 视景体为长方体，物体大小不随距离改变，保留平行性。
+    \item \textbf{透视投影 (Perspective)}: 视景体为平截头体，物体遵循“近大远小”规律，模拟人眼视觉。
+\end{itemize}
+
+\section{实验步骤}
+
+\subsection{环境搭建}
+\subsubsection{开发环境}
+\begin{itemize}
+    \item \textbf{操作系统}: Windows
+    \item \textbf{IDE}: Visual Studio Code
+    \item \textbf{构建工具}: CMake (3.x+)
+    \item \textbf{编译器}: MSVC (Visual Studio Build Tools)
+    \item \textbf{依赖库}: GLFW (窗口), GLM (数学), Dear ImGui (UI)。
+\end{itemize}
+
+\subsubsection{搭建过程}
+本项目采用 \texttt{CMake} 的 \texttt{FetchContent} 模块进行依赖管理。
+\begin{enumerate}
+    \item 配置 \texttt{CMakeLists.txt}，使用 \texttt{FetchContent\_MakeAvailable} 引入依赖。
+    \item 解决 GLM 包含路径及 ImGui OpenGL 后端绑定的问题。
+\end{enumerate}
+
+\subsection{绘制平面姓名首字母}
+\subsubsection{实现思路}
+\begin{itemize}
+    \item \textbf{姓名首字母}: Y, L, X。
+    \item \textbf{绘制方法}: 定义 \texttt{drawQuad} 函数，根据图元模式绘制四边形。
+    \item \textbf{Y}: 3 个矩形拼接；\textbf{L}: 2 个矩形拼接；\textbf{X}: 2 个交叉四边形。
+    \item 使用 \texttt{glTranslatef} 将各字母平移至以原点为中心的排列位置。
+\end{itemize}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{assets/images/2d-ylx.png}
+    \caption{二维姓名首字母绘制结果 (YLX)}
+\end{figure}
+
+\subsection{绘制立体姓氏首字母}
+\subsubsection{实现思路}
+\begin{itemize}
+    \item \textbf{立体化 (Extrusion)}: 实现 \texttt{drawExtrudedQuad}，在 Z 轴方向延伸 2D 顶点，绘制前、后及四个侧面。
+    \item \textbf{深度测试}: 开启 \texttt{GL\_DEPTH\_TEST}。
+    \item \textbf{旋转实现}: 使用 \texttt{glRotatef} 配合 ImGui 提供的交互参数（自动/手动旋转、旋转轴选择）实现模型旋转。
+\end{itemize}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{assets/images/3d-y.png}
+    \caption{立体姓氏首字母 Y}
+\end{figure}
+
+\section{实验总结}
+
+\subsection{图元绘制开销比较}
+通过 \texttt{vertexCount} 统计，绘制 YLX (共 7 个四边形) 的开销如下：
+
+\begin{table}[H]
+    \centering
+    \begin{tabular}{|l|c|c|}
+        \hline
+        \textbf{图元类型} & \textbf{单四边形顶点数} & \textbf{总顶点数} \\
+        \hline
+        \textbf{GL\_TRIANGLES} & 6 & 42 \\
+        \hline
+        \textbf{GL\_TRIANGLE\_STRIP} & 4 & 28 \\
+        \hline
+        \textbf{GL\_QUADS} & 4 & 28 \\
+        \hline
+    \end{tabular}
+    \caption{图元绘制开销比较}
+\end{table}
+\textbf{分析}: \texttt{GL\_TRIANGLE\_STRIP} 和 \texttt{GL\_QUADS} 相比 \texttt{GL\_TRIANGLES} 节省了约 33\% 的顶点传输量。
+
+\subsection{引用说明}
+本作业使用了 GLFW, GLM, Dear ImGui 开源库。核心绘制逻辑（字母定义、立体拉伸、交互控制）均为原创实现。
+
+\end{document}

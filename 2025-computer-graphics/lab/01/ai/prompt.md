@@ -24,4 +24,4 @@ For each interaction, you must follow this cycle:
 - **Atomic Progress:** Never mark a task as done in the progress file until the tests pass.
 - **Self-Correction:** If a test fails, update the progress file with a "Blocked/Failed" note and attempt to fix it before moving on.
 
-Now, please start by initializing or reading the `agent_progress.md` based on my request: 按照 PDF 中的要求与示例，完成图形学作业一。我的姓名首字母是 YLX。使用 GLFW + IMGUI 实现，用 CMake 的 FetchContent 功能下载依赖。
+Now, please start by initializing or reading the `agent_progress.md` based on my request: 按照 `task.md` 中的要求与示例，完成图形学作业一。我的姓名首字母是 YLX。使用 GLFW + IMGUI 实现，用 CMake 的 FetchContent 功能下载依赖。不要操作 Git。
