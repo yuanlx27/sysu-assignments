@@ -116,57 +116,42 @@ impl Sha256 {
     }
 }
 
-pub fn dsa_sign(
+pub fn dsa_verify(
     p: &BigInt,
     q: &BigInt,
     g: &BigInt,
-    x: &BigInt,
+    y: &BigInt,
+    r: &BigInt,
+    s: &BigInt,
     message: &[u8],
-) -> (BigInt, BigInt) {
+) -> bool {
+    if *r <= BigInt::zero() || *r >= *q {
+        return false;
+    }
+    if *s <= BigInt::zero() || *s >= *q {
+        return false;
+    }
+
+    let w = match s.mod_inverse(q) {
+        Some(inv) => inv,
+        None => return false,
+    };
+
     let mut hasher = Sha256::new();
     hasher.update(message);
     let hash = hasher.finalize();
     let h_m = BigInt::from_bytes_be(&hash);
 
-    // In DSA, if hash length > q length, we take leftmost bits.
-    // Here q is 256 bits, SHA-256 is 256 bits, so they match.
-    // But strictly speaking, we should take min(N, outlen) bits.
-    // Since N=256 and outlen=256, we use full hash.
-    
-    loop {
-        // 1. Choose random k, 0 < k < q
-        // We need a random number in range [1, q-1]
-        // My random(bits) generates [0, 2^bits).
-        // I'll generate random(256) and check if it's in range.
-        let k = loop {
-            let k_cand = BigInt::random(256);
-            if k_cand > BigInt::zero() && k_cand < *q {
-                break k_cand;
-            }
-        };
+    let u1 = (h_m * w.clone()) % q.clone();
+    let u2 = (r.clone() * w) % q.clone();
 
-        // 2. r = (g^k mod p) mod q
-        let r = g.mod_pow(&k, p) % q.clone();
-        if r.is_zero() {
-            continue;
-        }
+    // v = (g^u1 * y^u2 mod p) mod q
+    let gu1 = g.mod_pow(&u1, p);
+    let yu2 = y.mod_pow(&u2, p);
+    let v = (gu1 * yu2) % p.clone();
+    let v = v % q.clone();
 
-        // 3. s = k^-1 (H(m) + x*r) mod q
-        let k_inv = match k.mod_inverse(q) {
-            Some(inv) => inv,
-            None => continue, // Should not happen since q is prime and 0 < k < q
-        };
-
-        let xr = (x.clone() * r.clone()) % q.clone();
-        let hm_xr = (h_m.clone() + xr) % q.clone();
-        let s = (k_inv * hm_xr) % q.clone();
-
-        if s.is_zero() {
-            continue;
-        }
-
-        return (r, s);
-    }
+    v == *r
 }
 
 struct Montgomery {
@@ -396,29 +381,9 @@ impl BigInt {
             let quotient = &r / &newr;
             
             let _temp_t = t.clone();
-            // t = newt, newt = t - quotient * newt
-            // Since we are unsigned, we need to handle negative results carefully.
-            // We work in modulo `modulus` arithmetic for t.
-            // t_next = t - q * newt
-            // If t < q * newt, we add multiples of modulus until it's positive.
-            // Actually, standard way:
-            // (t, newt) = (newt, t - quotient * newt)
-            
-            // Let's track signs or just do arithmetic mod modulus.
-            // t and newt are coefficients such that t * self + ... = r
-            // We want t such that t * self = 1 (mod modulus)
-            
-            // Let's use signed arithmetic logic but implemented with unsigned + sign flag?
-            // Or just use the property:
-            // newt = (t - quotient * newt) % modulus
-            // If result is negative, add modulus.
             
             let q_times_newt = &quotient * &newt;
             let q_times_newt_mod = q_times_newt % modulus.clone();
-            
-            // We want: newt_next = (t - q_times_newt) % modulus
-            // If t >= q_times_newt_mod, direct sub.
-            // If t < q_times_newt_mod, (t + modulus - q_times_newt_mod) % modulus
             
             let newt_next = if t >= q_times_newt_mod {
                 (&t - &q_times_newt_mod) % modulus.clone()
@@ -456,12 +421,6 @@ impl BigInt {
             limbs[num_limbs - 1] >>= excess_bits;
         }
         
-        // Ensure the most significant bit is set if we want exactly `bits` length?
-        // Usually random(bits) means in range [0, 2^bits).
-        // If we want exactly `bits` bits, we should set the MSB.
-        // Let's assume range [0, 2^bits) for now, but for keygen we might want specific range.
-        // I'll implement `random_bits` which gives [0, 2^bits).
-        
         let mut res = BigInt { limbs };
         res.normalize();
         res
@@ -490,7 +449,6 @@ impl BigInt {
         bytes
     }
     
-    // Helper to pad to specific length
     pub fn to_bytes_be_pad(&self, len: usize) -> Vec<u8> {
         let mut bytes = self.to_bytes_be();
         if bytes.len() == 1 && bytes[0] == 0 {
@@ -514,8 +472,7 @@ impl BigInt {
         }
         let low = BigInt { limbs: self.limbs[0..n].to_vec() };
         let mut high = BigInt { limbs: self.limbs[n..].to_vec() };
-        low.clone().normalize(); // clone to avoid mutability issues if I were returning refs, but here I return values.
-        // Actually normalize is &mut self.
+        low.clone().normalize(); 
         let mut low = low;
         low.normalize();
         high.normalize();
@@ -638,7 +595,6 @@ impl Shr<usize> for BigInt {
                 new_limbs.push(new_limb);
             }
             new_limbs.reverse();
-            // The highest limb might have become 0, normalize handles it.
         }
         
         let mut result = BigInt { limbs: new_limbs };
@@ -882,7 +838,6 @@ impl fmt::Debug for BigInt {
     }
 }
 
-// For now, Display will just use Debug format until we implement division for decimal printing
 impl fmt::Display for BigInt {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:?}", self)
@@ -908,29 +863,36 @@ fn main() -> io::Result<()> {
     stdin.read_exact(&mut g_bytes)?;
     let g = BigInt::from_bytes_be(&g_bytes);
 
-    // 4. x: 32 bytes
-    let mut x_bytes = [0u8; 32];
-    stdin.read_exact(&mut x_bytes)?;
-    let x = BigInt::from_bytes_be(&x_bytes);
+    // 4. y: 256 bytes (Public Key)
+    let mut y_bytes = [0u8; 256];
+    stdin.read_exact(&mut y_bytes)?;
+    let y = BigInt::from_bytes_be(&y_bytes);
 
-    // 5. msg_len: 2 bytes (little-endian)
+    // 5. r: 32 bytes
+    let mut r_bytes = [0u8; 32];
+    stdin.read_exact(&mut r_bytes)?;
+    let r = BigInt::from_bytes_be(&r_bytes);
+
+    // 6. s: 32 bytes
+    let mut s_bytes = [0u8; 32];
+    stdin.read_exact(&mut s_bytes)?;
+    let s = BigInt::from_bytes_be(&s_bytes);
+
+    // 7. msg_len: 2 bytes (uint16_t)
     let mut msg_len_bytes = [0u8; 2];
     stdin.read_exact(&mut msg_len_bytes)?;
     let msg_len = u16::from_le_bytes(msg_len_bytes) as usize;
 
-    // 6. msg: msg_len bytes
+    // 8. msg: msg_len bytes
     let mut msg = vec![0u8; msg_len];
     stdin.read_exact(&mut msg)?;
 
-    // Sign
-    let (r, s) = dsa_sign(&p, &q, &g, &x, &msg);
-
-    // Output r and s (32 bytes big-endian)
-    let r_bytes = r.to_bytes_be_pad(32);
-    let s_bytes = s.to_bytes_be_pad(32);
-
-    stdout.write_all(&r_bytes)?;
-    stdout.write_all(&s_bytes)?;
+    if dsa_verify(&p, &q, &g, &y, &r, &s, &msg) {
+        stdout.write_all(b"PASS")?;
+    } else {
+        stdout.write_all(b"FAIL")?;
+    }
 
     Ok(())
 }
+
