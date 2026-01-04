@@ -1,0 +1,253 @@
+\documentclass[a4paper]{article}
+\usepackage[UTF8]{ctex}
+\usepackage{geometry}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{float}
+\usepackage{hyperref}
+
+\geometry{a4paper, scale=0.8}
+
+\lstset{
+    language=C++,
+    basicstyle=\ttfamily\footnotesize,
+    keywordstyle=\color{blue},
+    commentstyle=\color{gray},
+    stringstyle=\color{red},
+    breaklines=true,
+    frame=single,
+    numbers=left,
+    numberstyle=\tiny\color{gray},
+    tabsize=4
+}
+
+\title{计算机图形学 实验报告三：Phong Shading 与 VBO}
+\author{姓名：元朗曦 \quad 学号：23336294}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\section{实验目的}
+\begin{enumerate}
+    \item 理解并掌握 Phong 光照模型（Phong Shading）的原理与实现方法。
+    \item 掌握 OpenGL 中顶点缓冲对象（VBO, Vertex Buffer Object）的使用，理解其相对于立即模式（Immediate Mode）的优势。
+    \item 不依赖第三方辅助库（如 GLM, GLAD），手动实现必要的数学运算库（向量与矩阵）及 OpenGL 函数加载，深入理解底层机制。
+    \item 使用 Dear ImGui 构建简单的交互界面，实时调整光照参数及渲染模式。
+\end{enumerate}
+
+\section{实验原理}
+
+\subsection{Phong 光照模型}
+Phong 光照模型是计算机图形学中常用的局部光照模型，它将物体表面的光照分为三个部分：环境光（Ambient）、漫反射（Diffuse）和镜面反射（Specular）。
+
+\begin{equation}
+    I = I_{ambient} + I_{diffuse} + I_{specular}
+\end{equation}
+
+\begin{itemize}
+    \item \textbf{环境光}：模拟场景中来自四面八方的散射光，通常是一个常量。
+    \[ I_{ambient} = k_a \cdot L_a \]
+    \item \textbf{漫反射}：模拟光线照射到粗糙表面后的散射。强度与光线方向和法线方向的夹角余弦成正比（Lambert 定律）。
+    \[ I_{diffuse} = k_d \cdot L_d \cdot \max(\vec{N} \cdot \vec{L}, 0) \]
+    其中 $\vec{N}$ 为法线向量，$\vec{L}$ 为指向光源的向量。
+    \item \textbf{镜面反射}：模拟光线照射到光滑表面产生的高光。强度与视线方向和反射光线方向的夹角余弦的幂次成正比。
+    \[ I_{specular} = k_s \cdot L_s \cdot \max(\vec{V} \cdot \vec{R}, 0)^{\alpha} \]
+    其中 $\vec{V}$ 为指向观察者的向量，$\vec{R}$ 为反射向量，$\alpha$ 为高光系数（Shininess）。
+\end{itemize}
+
+\subsection{顶点缓冲对象 (VBO)}
+VBO 是 OpenGL 提供的一种机制，允许将顶点数据（位置、法线、纹理坐标等）存储在显卡的高速显存中。
+\begin{itemize}
+    \item \textbf{优势}：相比于立即模式（`glBegin`/`glEnd`）需要在每一帧通过 CPU 向 GPU 发送数据，VBO 只需要在初始化时发送一次数据，渲染时 GPU 直接从显存读取，极大地减少了 CPU-GPU 之间的带宽消耗，提高了渲染效率。
+\end{itemize}
+
+\section{实验内容}
+
+\subsection{项目环境搭建}
+本项目使用 CMake 构建，通过 `FetchContent` 模块自动拉取 GLFW 和 Dear ImGui 库。为了深入理解底层，本项目\textbf{未使用} GLAD（OpenGL 加载库）和 GLM（数学库），而是手动实现了相关功能。
+
+\subsection{核心代码实现}
+
+\subsubsection{1. OpenGL 函数加载}
+由于未使用 GLAD，需要手动定义函数指针并使用 `glfwGetProcAddress` 加载 OpenGL 核心函数。
+\begin{lstlisting}
+// Define function pointer types
+typedef void (APIENTRY *PFNGLGENBUFFERSPROC) (GLsizei n, GLuint *buffers);
+// ... other type definitions ...
+
+// Declare function pointer variables
+PFNGLGENBUFFERSPROC glGenBuffers = NULL;
+// ...
+
+// Load functions
+void loadOpenGLFunctions() {
+    glGenBuffers = (PFNGLGENBUFFERSPROC)glfwGetProcAddress("glGenBuffers");
+    // ... load other functions ...
+}
+\end{lstlisting}
+
+\subsubsection{2. 简易数学库实现}
+实现了 `Vec3` 和 `Mat4` 结构体，支持向量加减乘除、点乘、叉乘、归一化，以及矩阵的平移、旋转、透视投影和 LookAt 变换。
+\begin{lstlisting}
+struct Vec3 {
+    float x, y, z;
+    // ... operator overloads ...
+    Vec3 normalize() const { /* ... */ }
+    float dot(const Vec3& other) const { /* ... */ }
+    Vec3 cross(const Vec3& other) const { /* ... */ }
+};
+
+struct Mat4 {
+    float m[4][4];
+    static Mat4 perspective(float fov, float aspect, float near, float far) { /* ... */ }
+    static Mat4 lookAt(Vec3 eye, Vec3 center, Vec3 up) { /* ... */ }
+    static Mat4 rotate(float angle, Vec3 axis) { /* ... */ }
+    // ...
+};
+\end{lstlisting}
+
+\subsubsection{3. 球体几何生成}
+通过经纬度划分法生成球体的顶点位置和法线数据。
+\begin{lstlisting}
+void generateSphere(float radius, int stacks, int slices) {
+    for (int i = 0; i < stacks; ++i) {
+        for (int j = 0; j < slices; ++j) {
+            // Compute spherical coordinates (x, y, z)
+            // Compute normal (normalized position vector)
+            // Push data into std::vector<float> sphereVertices
+            // Each vertex contains 6 floats: x, y, z, nx, ny, nz
+        }
+    }
+}
+\end{lstlisting}
+
+\subsubsection{4. Shader 实现 (Phong Shading)}
+\textbf{Vertex Shader}: 计算世界坐标系下的顶点位置和法线，并传递给 Fragment Shader。
+\begin{lstlisting}
+#version 330 core
+layout (location = 0) in vec3 aPos;
+layout (location = 1) in vec3 aNormal;
+
+out vec3 FragPos;
+out vec3 Normal;
+
+uniform mat4 model;
+uniform mat4 view;
+uniform mat4 projection;
+
+void main() {
+    FragPos = vec3(model * vec4(aPos, 1.0));
+    Normal = mat3(transpose(inverse(model))) * aNormal;  
+    gl_Position = projection * view * vec4(FragPos, 1.0);
+}
+\end{lstlisting}
+
+\textbf{Fragment Shader}: 在片元阶段计算 Phong 光照。
+\begin{lstlisting}
+#version 330 core
+out vec4 FragColor;
+in vec3 Normal;
+in vec3 FragPos;
+
+uniform vec3 lightPos; 
+uniform vec3 viewPos; 
+uniform vec3 lightColor;
+uniform vec3 objectColor;
+uniform float shininess;
+
+void main() {
+    // Ambient
+    float ambientStrength = 0.1;
+    vec3 ambient = ambientStrength * lightColor;
+  	
+    // Diffuse 
+    vec3 norm = normalize(Normal);
+    vec3 lightDir = normalize(lightPos - FragPos);
+    float diff = max(dot(norm, lightDir), 0.0);
+    vec3 diffuse = diff * lightColor;
+    
+    // Specular
+    float specularStrength = 0.5;
+    vec3 viewDir = normalize(viewPos - FragPos);
+    vec3 reflectDir = reflect(-lightDir, norm);  
+    float spec = pow(max(dot(viewDir, reflectDir), 0.0), shininess);
+    vec3 specular = specularStrength * spec * lightColor;  
+        
+    vec3 result = (ambient + diffuse + specular) * objectColor;
+    FragColor = vec4(result, 1.0);
+} 
+\end{lstlisting}
+
+\subsubsection{5. 渲染循环与 VBO/立即模式切换}
+在主循环中，根据 ImGui 的复选框状态选择渲染方式。
+\begin{lstlisting}
+if (useVBO) {
+    glBindVertexArray(VAO);
+    glDrawArrays(GL_TRIANGLES, 0, sphereVertexCount);
+} else {
+    // Immediate mode
+    glBindVertexArray(0);
+    glBegin(GL_TRIANGLES);
+    for (int i = 0; i < sphereVertexCount; ++i) {
+        // Manually pass normals and vertices
+        glVertexAttrib3f(1, ...); // normal
+        glVertex3f(...);          // position
+    }
+    glEnd();
+}
+\end{lstlisting}
+
+\section{实验结果}
+
+\subsection{运行效果}
+程序运行后，显示一个被光照照亮的球体。
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{assets/images/demo.png}
+    \caption{Phong 光照模型渲染效果}
+    \label{fig:demo}
+\end{figure}
+
+\begin{itemize}
+    \item 球体表面呈现出平滑的光照过渡，可以看到明显的高光（Specular）、漫反射（Diffuse）和环境光（Ambient）效果。
+    \item 球体在不断旋转，展示了动态的光照变化。
+\end{itemize}
+
+具体效果见 \texttt{assets/demo.mp4}。
+
+\subsection{交互控制}
+通过 ImGui 面板，可以实时调整以下参数：
+\begin{itemize}
+    \item \textbf{Use VBO}: 切换 VBO 渲染和立即模式渲染。
+    \item \textbf{Light Position}: 调整光源在空间中的位置。
+    \item \textbf{Light Color}: 调整光源颜色。
+    \item \textbf{Object Color}: 调整球体材质颜色。
+    \item \textbf{Shininess}: 调整高光系数，改变高光的大小和锐度。
+\end{itemize}
+
+\subsection{性能与效果对比}
+\begin{enumerate}
+    \item \textbf{视觉效果}：无论是使用 VBO 还是立即模式，视觉上渲染出的球体和光照效果是完全一致的，因为底层的 Shader 计算逻辑相同。
+    \item \textbf{代码逻辑}：
+    \begin{itemize}
+        \item \textbf{VBO}：代码简洁，只需在初始化时绑定数据，绘制时调用 `glDrawArrays`。
+        \item \textbf{立即模式}：需要在每一帧的循环中遍历所有顶点，调用大量的 `glVertex` 函数，代码冗长且效率低。
+    \end{itemize}
+    \item \textbf{效率分析}：虽然在本实验简单的球体模型下帧率差异可能不明显，但在处理复杂模型（数万个顶点以上）时，VBO 的性能将显著优于立即模式，因为减少了 CPU 到 GPU 的函数调用开销和数据传输瓶颈。
+\end{enumerate}
+
+\section{实验总结}
+本次实验成功实现了基于 Phong 光照模型的球体渲染，并对比了 VBO 和立即模式两种渲染方式。
+\begin{enumerate}
+    \item 深入理解了图形管线中 Vertex Shader 和 Fragment Shader 的协作流程，特别是法线变换和光照计算的细节。
+    \item 掌握了不依赖 GLM 和 GLAD 库进行 OpenGL 开发的方法，对 OpenGL 的状态机机制和函数指针加载有了更直观的认识。
+    \item 验证了 VBO 作为现代 OpenGL 核心特性的重要性，它是实现高效实时渲染的基础。
+    \item 通过 ImGui 实现了参数的可视化调节，增强了实验的交互性和直观性。
+\end{enumerate}
+
+\end{document}
