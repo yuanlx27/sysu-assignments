@@ -5,7 +5,7 @@
 
 #show: zuoye.with(
   title: "第四章作业",
-  subtitle: "算法设计与分析",
+  subtitle: "算法设计与分析（理论）",
   student: (name: "元朗曦", id: "23336294"),
 )
 
